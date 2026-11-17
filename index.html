@@ -1,0 +1,1764 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VASCU-TRACE - Dual-Mode PPG & BIS Cardiovascular Profiling</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts: Inter & Plus Jakarta Sans -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js for Signal Visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            primary: '#1677C8',
+                            secondary: '#16A6A1',
+                            accent: '#6B72D6',
+                            bg: '#F3F7FC',
+                            surface: '#FFFFFF',
+                            textPrimary: '#203047',
+                            textSecondary: '#68788D',
+                            border: '#E1EAF2',
+                            success: '#239B70',
+                            warning: '#E6A23C',
+                            danger: '#DC5B65'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'Inter', 'sans-serif'],
+                        mono: ['monospace']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom scrollbar and accessibility adjustments */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.05);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1677C8;
+            border-radius: 4px;
+        }
+        .pulse-wave {
+            animation: pulseWave 2s infinite linear;
+        }
+        @keyframes pulseWave {
+            0% { stroke-dashoffset: 100; }
+            100% { stroke-dashoffset: 0; }
+        }
+        .ecg-path {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: dash 3s linear infinite;
+        }
+        @keyframes dash {
+            to { stroke-dashoffset: 0; }
+        }
+        /* Custom text sizing classes for setting panel dynamic adjustments */
+        .text-size-sm { font-size: 13px; }
+        .text-size-normal { font-size: 15px; }
+        .text-size-lg { font-size: 17px; }
+    </style>
+</head>
+<body class="bg-brand-bg dark:bg-gray-900 text-brand-textPrimary dark:text-gray-100 font-sans h-full transition-colors duration-200 text-size-normal antialiased flex flex-col overflow-hidden">
+
+    <!-- MAIN APP WRAPPER -->
+    <div id="app" class="flex h-screen w-screen overflow-hidden">
+
+        <!-- ========================================================= -->
+        <!-- ONBOARDING & PROFILE SETUP MODAL / OVERLAY (FIRST LAUNCH) -->
+        <!-- ========================================================= -->
+        <div id="onboardingModal" class="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-xl w-full p-6 md:p-8 border border-brand-border dark:border-gray-700 relative">
+                
+                <!-- Step 1: Welcome -->
+                <div id="onboardingStep1" class="text-center space-y-5">
+                    <div class="inline-flex items-center justify-center w-20 h-20 bg-blue-50 dark:bg-blue-900/40 rounded-full text-brand-primary mb-2">
+                        <i class="fa-solid fa-heart-pulse text-4xl animate-pulse"></i>
+                    </div>
+                    <h1 class="text-3xl font-extrabold tracking-tight text-brand-primary dark:text-blue-400">VASCU-TRACE</h1>
+                    <p class="text-xs tracking-widest font-bold text-brand-secondary uppercase">Vascular Transdermal Aortic Calibration & Edge System</p>
+                    <p class="text-sm text-brand-textSecondary dark:text-gray-300 leading-relaxed px-2">
+                        Integrasi Dual-Mode Optical PPG dan Bioimpedance Spectroscopy untuk Profiling Cuffless Central Aortic Pressure serta Autotriage Arteriosklerosis pada Pelayanan Kesehatan Primer.
+                    </p>
+                    
+                    <div class="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-left text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                        <div class="font-bold flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                            <i class="fa-solid fa-triangle-exclamation"></i> DISKLAIMER KONSEP & DEMO
+                        </div>
+                        <p>Aplikasi ini merupakan prototipe konseptual untuk demonstrasi dan penelitian. Seluruh hasil simulasi bersifat edukatif dan tidak boleh diperlakukan sebagai diagnosis medis klinis.</p>
+                    </div>
+
+                    <button onclick="goToOnboardingStep(2)" class="w-full py-3.5 px-6 bg-brand-primary hover:bg-blue-700 text-white font-semibold rounded-xl shadow-lg transition duration-200 flex items-center justify-center gap-2">
+                        Mulai Pengaturan Profil <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+
+                <!-- Step 2: Form Biodata -->
+                <div id="onboardingStep2" class="hidden space-y-4">
+                    <div class="border-b border-brand-border dark:border-gray-700 pb-3">
+                        <h2 class="text-xl font-bold text-brand-textPrimary dark:text-white">Formulir Profil Pengguna</h2>
+                        <p class="text-xs text-brand-textSecondary dark:text-gray-400">Isi data dasar untuk personalisasi indikator pada tampilan simulasi.</p>
+                    </div>
+
+                    <form id="profileForm" onsubmit="saveUserProfile(event)" class="space-y-3">
+                        <div>
+                            <label class="block text-xs font-semibold mb-1">Nama Lengkap *</label>
+                            <input type="text" id="inputName" required placeholder="Dr. Ahmad Subagja / Budi Santoso" class="w-full px-3 py-2 text-sm rounded-lg border border-brand-border dark:border-gray-600 dark:bg-gray-700 focus:ring-2 focus:ring-brand-primary outline-none">
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold mb-1">Tanggal Lahir *</label>
+                                <input type="date" id="inputDob" required class="w-full px-3 py-2 text-sm rounded-lg border border-brand-border dark:border-gray-600 dark:bg-gray-700 focus:ring-2 focus:ring-brand-primary outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1">Jenis Kelamin</label>
+                                <select id="inputGender" class="w-full px-3 py-2 text-sm rounded-lg border border-brand-border dark:border-gray-600 dark:bg-gray-700 focus:ring-2 focus:ring-brand-primary outline-none">
+                                    <option value="Laki-laki">Laki-laki</option>
+                                    <option value="Perempuan">Perempuan</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold mb-1">Tinggi Badan (cm) *</label>
+                                <input type="number" id="inputHeight" value="170" required min="100" max="230" class="w-full px-3 py-2 text-sm rounded-lg border border-brand-border dark:border-gray-600 dark:bg-gray-700 focus:ring-2 focus:ring-brand-primary outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1">Kota / Domisili</label>
+                                <input type="text" id="inputCity" placeholder="Jakarta / Surabaya" class="w-full px-3 py-2 text-sm rounded-lg border border-brand-border dark:border-gray-600 dark:bg-gray-700 focus:ring-2 focus:ring-brand-primary outline-none">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1">Peran Pengguna *</label>
+                            <select id="inputRole" class="w-full px-3 py-2 text-sm rounded-lg border border-brand-border dark:border-gray-600 dark:bg-gray-700 focus:ring-2 focus:ring-brand-primary outline-none">
+                                <option value="Tenaga Kesehatan">Tenaga Kesehatan (Dokter/Perawat)</option>
+                                <option value="Peneliti">Peneliti / Akademisi</option>
+                                <option value="Pengguna Umum">Pengguna Umum</option>
+                                <option value="Administrator">Administrator Klinik</option>
+                            </select>
+                        </div>
+
+                        <p class="text-[11px] text-brand-textSecondary dark:text-gray-400 italic">
+                            * Data profil digunakan untuk personalisasi algoritma simulasi. Pengisian biodata bukan pengganti pemeriksaan kesehatan klinis resmi.
+                        </p>
+
+                        <div class="flex gap-2 pt-2">
+                            <button type="button" onclick="goToOnboardingStep(1)" class="px-4 py-2 border border-brand-border text-xs rounded-lg font-semibold hover:bg-gray-100 dark:hover:bg-gray-700">Kembali</button>
+                            <button type="submit" class="flex-1 py-2 bg-brand-primary text-white text-xs font-bold rounded-lg shadow hover:bg-blue-700">Simpan Profil & Lanjut</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Step 3: Welcome Screen -->
+                <div id="onboardingStep3" class="hidden text-center space-y-5">
+                    <div class="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/40 text-brand-success rounded-full flex items-center justify-center mx-auto text-3xl">
+                        <i class="fa-solid fa-circle-check"></i>
+                    </div>
+                    <h2 class="text-2xl font-bold text-brand-textPrimary dark:text-white">Selamat Datang di VASCU-TRACE!</h2>
+                    <p class="text-sm text-brand-textSecondary dark:text-gray-300">
+                        Halo, <span id="welcomeUserName" class="font-bold text-brand-primary">Pengguna</span>. Profil Anda telah berhasil didaftarkan. Mari mulai menjelajahi platform simulasi vaskular dual-mode.
+                    </p>
+                    <button onclick="closeOnboarding()" class="w-full py-3 bg-brand-primary text-white font-bold rounded-xl shadow-lg hover:bg-blue-700">
+                        Masuk ke Dashboard Utama <i class="fa-solid fa-gauge-high ml-1"></i>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ========================================================= -->
+        <!-- SIDEBAR NAVIGATION (DESKTOP ONLY) -->
+        <!-- ========================================================= -->
+        <aside class="hidden md:flex flex-col w-64 bg-white dark:bg-gray-800 border-r border-brand-border dark:border-gray-700 z-20">
+            <!-- Brand Logo Header -->
+            <div class="p-4 border-b border-brand-border dark:border-gray-700 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-primary to-brand-secondary flex items-center justify-center text-white shadow-md">
+                    <i class="fa-solid fa-heart-pulse text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-extrabold text-lg text-brand-primary dark:text-blue-400 tracking-tight leading-none">VASCU-TRACE</h1>
+                    <span class="text-[10px] font-semibold text-brand-secondary tracking-widest block mt-0.5 uppercase">Clinical Suite</span>
+                </div>
+            </div>
+
+            <!-- Nav Links -->
+            <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+                <button onclick="switchTab('beranda')" id="sideNav-beranda" class="nav-side-link w-full flex items-center gap-3 px-3 py-2.5 text-sm font-semibold rounded-xl text-brand-primary bg-blue-50 dark:bg-blue-900/30">
+                    <i class="fa-solid fa-house text-base w-5 text-center"></i> Beranda
+                </button>
+                <button onclick="switchTab('monitoring')" id="sideNav-monitoring" class="nav-side-link w-full flex items-center gap-3 px-3 py-2.5 text-sm font-semibold rounded-xl text-brand-textSecondary dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <i class="fa-solid fa-wave-square text-base w-5 text-center"></i> Monitoring
+                </button>
+                <button onclick="switchTab('analisis')" id="sideNav-analisis" class="nav-side-link w-full flex items-center gap-3 px-3 py-2.5 text-sm font-semibold rounded-xl text-brand-textSecondary dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <i class="fa-solid fa-chart-line text-base w-5 text-center"></i> Analisis Dual-Mode
+                </button>
+                <button onclick="switchTab('autotriage')" id="sideNav-autotriage" class="nav-side-link w-full flex items-center gap-3 px-3 py-2.5 text-sm font-semibold rounded-xl text-brand-textSecondary dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <i class="fa-solid fa-stethoscope text-base w-5 text-center"></i> Autotriage
+                </button>
+                <button onclick="switchTab('riwayat')" id="sideNav-riwayat" class="nav-side-link w-full flex items-center gap-3 px-3 py-2.5 text-sm font-semibold rounded-xl text-brand-textSecondary dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <i class="fa-solid fa-clock-rotate-left text-base w-5 text-center"></i> Riwayat Aktivitas
+                </button>
+                <button onclick="switchTab('edukasi')" id="sideNav-edukasi" class="nav-side-link w-full flex items-center gap-3 px-3 py-2.5 text-sm font-semibold rounded-xl text-brand-textSecondary dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <i class="fa-solid fa-graduation-cap text-base w-5 text-center"></i> Pusat Edukasi
+                </button>
+            </nav>
+
+            <!-- Bottom Disclaimer Badge -->
+            <div class="p-3 border-t border-brand-border dark:border-gray-700 text-center">
+                <div class="bg-gray-50 dark:bg-gray-900 p-2.5 rounded-xl border border-brand-border dark:border-gray-700">
+                    <span class="text-[10px] font-bold text-amber-600 dark:text-amber-400 block uppercase">Mode Prototipe</span>
+                    <p class="text-[11px] text-brand-textSecondary dark:text-gray-400">Data bersumber dari model kalibrasi simulasi.</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ========================================================= -->
+        <!-- MAIN CONTENT AREA (HEADER + SCREEN CONTAINERS) -->
+        <!-- ========================================================= -->
+        <main class="flex-1 flex flex-col h-full overflow-hidden bg-brand-bg dark:bg-gray-900 relative">
+            
+            <!-- GLOBAL TOP HEADER -->
+            <header class="h-16 bg-white dark:bg-gray-800 border-b border-brand-border dark:border-gray-700 flex items-center justify-between px-4 md:px-6 z-10">
+                <!-- Mobile Brand Header Info -->
+                <div class="flex items-center gap-2 md:hidden">
+                    <div class="w-8 h-8 rounded-lg bg-brand-primary flex items-center justify-center text-white">
+                        <i class="fa-solid fa-heart-pulse text-sm"></i>
+                    </div>
+                    <span class="font-extrabold text-brand-primary dark:text-blue-400 tracking-tight">VASCU-TRACE</span>
+                </div>
+
+                <!-- Desktop Greeting/Clock -->
+                <div class="hidden md:flex flex-col">
+                    <span id="timeGreeting" class="text-xs text-brand-textSecondary dark:text-gray-400 font-medium">Selamat Pagi,</span>
+                    <div class="text-sm font-bold text-brand-textPrimary dark:text-white flex items-center gap-2">
+                        <span id="headerUserName">Pengguna</span>
+                        <span class="text-xs font-normal text-brand-secondary bg-teal-50 dark:bg-teal-950 px-2 py-0.5 rounded-full border border-teal-200 dark:border-teal-800" id="headerUserRole">Tenaga Kesehatan</span>
+                    </div>
+                </div>
+
+                <!-- Top Right Controls (Date, Notifications, Profile Dropdown) -->
+                <div class="flex items-center gap-3">
+                    <span id="currentDateDisplay" class="hidden lg:inline-block text-xs font-medium text-brand-textSecondary dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-3 py-1.5 rounded-lg">
+                        Rabu, 18 Nov 2026
+                    </span>
+
+                    <button onclick="toggleNotificationModal()" class="relative p-2 text-brand-textSecondary dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition">
+                        <i class="fa-solid fa-bell"></i>
+                        <span class="absolute top-1 right-1 w-2 h-2 bg-brand-danger rounded-full"></span>
+                    </button>
+
+                    <!-- Profile Dropdown Trigger -->
+                    <div class="relative">
+                        <button onclick="toggleProfileDropdown()" class="flex items-center gap-2 p-1 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                            <div class="w-9 h-9 rounded-xl bg-brand-accent text-white flex items-center justify-center font-bold text-sm shadow">
+                                <span id="userAvatarText">U</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-down text-xs text-brand-textSecondary dark:text-gray-400"></i>
+                        </button>
+
+                        <!-- Dropdown Menu -->
+                        <div id="profileDropdown" class="hidden absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-brand-border dark:border-gray-700 py-2 z-50">
+                            <div class="px-4 py-2 border-b border-brand-border dark:border-gray-700">
+                                <p class="text-xs font-bold text-brand-textPrimary dark:text-white" id="dropdownName">Pengguna</p>
+                                <p class="text-[11px] text-brand-textSecondary dark:text-gray-400" id="dropdownRole">Tenaga Kesehatan</p>
+                            </div>
+                            <a href="#" onclick="openProfileModal(); return false;" class="flex items-center gap-2.5 px-4 py-2 text-xs text-brand-textPrimary dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-gray-700">
+                                <i class="fa-solid fa-user-gear text-brand-primary"></i> Profil Saya
+                            </a>
+                            <a href="#" onclick="openSettingsModal(); return false;" class="flex items-center gap-2.5 px-4 py-2 text-xs text-brand-textPrimary dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-gray-700">
+                                <i class="fa-solid fa-sliders text-brand-secondary"></i> Pengaturan Aplikasi
+                            </a>
+                            <a href="#" onclick="openFaqModal(); return false;" class="flex items-center gap-2.5 px-4 py-2 text-xs text-brand-textPrimary dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-gray-700">
+                                <i class="fa-solid fa-circle-question text-brand-accent"></i> FAQ & Panduan
+                            </a>
+                            <a href="#" onclick="openHelpModal(); return false;" class="flex items-center gap-2.5 px-4 py-2 text-xs text-brand-textPrimary dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-gray-700">
+                                <i class="fa-solid fa-headset text-brand-success"></i> Pusat Bantuan
+                            </a>
+                            <a href="#" onclick="openAboutModal(); return false;" class="flex items-center gap-2.5 px-4 py-2 text-xs text-brand-textPrimary dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-gray-700">
+                                <i class="fa-solid fa-circle-info text-blue-500"></i> Tentang VASCU-TRACE
+                            </a>
+                            <div class="border-t border-brand-border dark:border-gray-700 mt-1 pt-1">
+                                <a href="#" onclick="resetProfile(); return false;" class="flex items-center gap-2.5 px-4 py-2 text-xs text-brand-danger hover:bg-red-50 dark:hover:bg-red-950/30">
+                                    <i class="fa-solid fa-right-from-bracket"></i> Reset / Keluar Profil
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- CONTAINER FOR TAB PAGES -->
+            <div class="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6" id="mainScrollContainer">
+
+                <!-- ---------------------------------------------------- -->
+                <!-- PAGE 1: BERANDA (DASHBOARD) -->
+                <!-- ---------------------------------------------------- -->
+                <section id="page-beranda" class="tab-page space-y-6">
+                    <!-- Banner Info -->
+                    <div class="bg-gradient-to-r from-brand-primary via-blue-600 to-brand-secondary rounded-2xl p-5 text-white shadow-lg relative overflow-hidden">
+                        <div class="relative z-10 max-w-2xl">
+                            <span class="bg-white/20 text-xs font-semibold px-2.5 py-1 rounded-md uppercase tracking-wider">Clinical Dashboard</span>
+                            <h2 class="text-2xl font-bold mt-2">VASCU-TRACE Profiling System</h2>
+                            <p class="text-xs md:text-sm text-blue-50 mt-1 leading-relaxed">
+                                Monitoring transdermal non-invasif menggunakan kalkulasi kalibrasi dual-mode sinyal PPG optik dan Bioimpedance Spectroscopy (BIS).
+                            </p>
+                        </div>
+                        <i class="fa-solid fa-heart-pulse absolute -right-4 -bottom-6 text-9xl opacity-15"></i>
+                    </div>
+
+                    <!-- Grid Status Utama (6 Cards) -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <!-- Card 1 -->
+                        <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm hover:shadow-md transition">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-bold text-brand-textSecondary dark:text-gray-400">Vascular Health Overview</span>
+                                <div class="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-brand-primary flex items-center justify-center">
+                                    <i class="fa-solid fa-heart text-sm"></i>
+                                </div>
+                            </div>
+                            <div class="text-xl font-extrabold text-brand-textPrimary dark:text-white">Normal Elasticity</div>
+                            <p class="text-xs text-brand-textSecondary dark:text-gray-400 mt-1">Indeks Kekakuan Arteri: 6.2 m/s (Simulasi)</p>
+                            <div class="mt-3 flex items-center justify-between text-xs pt-2 border-t border-gray-100 dark:border-gray-700">
+                                <span class="text-brand-success font-semibold flex items-center gap-1"><i class="fa-solid fa-circle-check"></i> Profil Stabil</span>
+                                <button onclick="switchTab('analisis')" class="text-brand-primary font-bold hover:underline">Detail &rarr;</button>
+                            </div>
+                        </div>
+
+                        <!-- Card 2 -->
+                        <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm hover:shadow-md transition">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-bold text-brand-textSecondary dark:text-gray-400">PPG Signal Status</span>
+                                <div class="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-900/30 text-brand-secondary flex items-center justify-center">
+                                    <i class="fa-solid fa-wave-square text-sm"></i>
+                                </div>
+                            </div>
+                            <div class="text-xl font-extrabold text-brand-textPrimary dark:text-white">98% SNR Quality</div>
+                            <p class="text-xs text-brand-textSecondary dark:text-gray-400 mt-1">Sinyal Optik Green/IR 525nm Transdermal</p>
+                            <div class="mt-3 flex items-center justify-between text-xs pt-2 border-t border-gray-100 dark:border-gray-700">
+                                <span class="text-brand-success font-semibold flex items-center gap-1"><i class="fa-solid fa-signal"></i> Optimal</span>
+                                <button onclick="switchTab('monitoring')" class="text-brand-primary font-bold hover:underline">Monitor &rarr;</button>
+                            </div>
+                        </div>
+
+                        <!-- Card 3 -->
+                        <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm hover:shadow-md transition">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-bold text-brand-textSecondary dark:text-gray-400">Bioimpedance (BIS)</span>
+                                <div class="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-brand-accent flex items-center justify-center">
+                                    <i class="fa-solid fa-bolt text-sm"></i>
+                                </div>
+                            </div>
+                            <div class="text-xl font-extrabold text-brand-textPrimary dark:text-white">Z0: 45.2 Ω</div>
+                            <p class="text-xs text-brand-textSecondary dark:text-gray-400 mt-1">Spektrum Frekuensi 10kHz - 100kHz</p>
+                            <div class="mt-3 flex items-center justify-between text-xs pt-2 border-t border-gray-100 dark:border-gray-700">
+                                <span class="text-brand-success font-semibold flex items-center gap-1"><i class="fa-solid fa-check"></i> Terhubung</span>
+                                <button onclick="switchTab('monitoring')" class="text-brand-primary font-bold hover:underline">Spektrum &rarr;</button>
+                            </div>
+                        </div>
+
+                        <!-- Card 4 -->
+                        <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm hover:shadow-md transition">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-bold text-brand-textSecondary dark:text-gray-400">Central Aortic Pressure</span>
+                                <div class="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-900/30 text-brand-danger flex items-center justify-center">
+                                    <i class="fa-solid fa-gauge text-sm"></i>
+                                </div>
+                            </div>
+                            <div class="text-xl font-extrabold text-brand-textPrimary dark:text-white">118 / 76 <span class="text-xs font-normal text-gray-500">mmHg</span></div>
+                            <p class="text-xs text-brand-textSecondary dark:text-gray-400 mt-1">Estimasi Aorta Sentral (Cuffless)</p>
+                            <div class="mt-3 flex items-center justify-between text-xs pt-2 border-t border-gray-100 dark:border-gray-700">
+                                <span class="text-brand-success font-semibold">MAP: 90 mmHg</span>
+                                <button onclick="switchTab('analisis')" class="text-brand-primary font-bold hover:underline">Profil &rarr;</button>
+                            </div>
+                        </div>
+
+                        <!-- Card 5 -->
+                        <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm hover:shadow-md transition">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-bold text-brand-textSecondary dark:text-gray-400">Vascular Risk Screening</span>
+                                <div class="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-brand-warning flex items-center justify-center">
+                                    <i class="fa-solid fa-shield-halved text-sm"></i>
+                                </div>
+                            </div>
+                            <div class="text-xl font-extrabold text-brand-success">LOW PRIORITY</div>
+                            <p class="text-xs text-brand-textSecondary dark:text-gray-400 mt-1">Skor Risiko Autotriage: 12% (Rendah)</p>
+                            <div class="mt-3 flex items-center justify-between text-xs pt-2 border-t border-gray-100 dark:border-gray-700">
+                                <span class="text-gray-500">Evaluasi Rutin</span>
+                                <button onclick="switchTab('autotriage')" class="text-brand-primary font-bold hover:underline">Triage &rarr;</button>
+                            </div>
+                        </div>
+
+                        <!-- Card 6 -->
+                        <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm hover:shadow-md transition">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-bold text-brand-textSecondary dark:text-gray-400">Monitoring Activity</span>
+                                <div class="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 flex items-center justify-center">
+                                    <i class="fa-solid fa-stopwatch text-sm"></i>
+                                </div>
+                            </div>
+                            <div class="text-xl font-extrabold text-brand-textPrimary dark:text-white">Simulasi Aktif</div>
+                            <p class="text-xs text-brand-textSecondary dark:text-gray-400 mt-1">Sesi Terakhir: 10 Menit lalu</p>
+                            <div class="mt-3 flex items-center justify-between text-xs pt-2 border-t border-gray-100 dark:border-gray-700">
+                                <span class="text-brand-primary font-semibold">12 Record Tersimpan</span>
+                                <button onclick="switchTab('riwayat')" class="text-brand-primary font-bold hover:underline">Riwayat &rarr;</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Access Buttons -->
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm">
+                        <h3 class="text-sm font-bold text-brand-textPrimary dark:text-white mb-3">Quick Access (Akses Cepat Modul)</h3>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <button onclick="switchTab('monitoring')" class="p-3 bg-blue-50 dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-gray-600 rounded-xl flex flex-col items-center justify-center text-center transition">
+                                <i class="fa-solid fa-play text-brand-primary text-lg mb-1"></i>
+                                <span class="text-xs font-bold">Mulai Monitoring</span>
+                            </button>
+                            <button onclick="switchTab('analisis')" class="p-3 bg-teal-50 dark:bg-gray-700 hover:bg-teal-100 dark:hover:bg-gray-600 rounded-xl flex flex-col items-center justify-center text-center transition">
+                                <i class="fa-solid fa-chart-pie text-brand-secondary text-lg mb-1"></i>
+                                <span class="text-xs font-bold">Analisis Sinyal</span>
+                            </button>
+                            <button onclick="switchTab('autotriage')" class="p-3 bg-amber-50 dark:bg-gray-700 hover:bg-amber-100 dark:hover:bg-gray-600 rounded-xl flex flex-col items-center justify-center text-center transition">
+                                <i class="fa-solid fa-calculator text-brand-warning text-lg mb-1"></i>
+                                <span class="text-xs font-bold">Simulasi Triage</span>
+                            </button>
+                            <button onclick="switchTab('edukasi')" class="p-3 bg-purple-50 dark:bg-gray-700 hover:bg-purple-100 dark:hover:bg-gray-600 rounded-xl flex flex-col items-center justify-center text-center transition">
+                                <i class="fa-solid fa-book-medical text-brand-accent text-lg mb-1"></i>
+                                <span class="text-xs font-bold">Pelajari Teknologi</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Anatomi & Interactive Section Preview -->
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm">
+                        <div class="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 gap-2">
+                            <div>
+                                <h3 class="text-base font-bold text-brand-textPrimary dark:text-white">Ilustrasi Anatomis & Penempatan Sensor</h3>
+                                <p class="text-xs text-brand-textSecondary dark:text-gray-400">Klik node sensor atau organ pada diagram 2D di bawah untuk melihat detail teknologi.</p>
+                            </div>
+                            <span class="text-xs bg-blue-100 text-brand-primary font-bold px-2.5 py-1 rounded-lg">Interaktif 2D Diagram</span>
+                        </div>
+                        
+                        <!-- Dynamic SVG Anatomy Chart -->
+                        <div class="bg-slate-900 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-around gap-6 text-white min-h-[320px] relative overflow-hidden">
+                            <!-- SVG Card Vascular Anatomy -->
+                            <div class="w-full md:w-1/2 flex justify-center relative">
+                                <svg viewBox="0 0 300 360" class="w-64 h-80">
+                                    <!-- Heart Outline & Pulse -->
+                                    <path d="M150 140 C120 100 80 120 80 160 C80 200 150 250 150 250 C150 250 220 200 220 160 C220 120 180 100 150 140 Z" fill="#DC5B65" opacity="0.8" class="animate-pulse"/>
+                                    
+                                    <!-- Aorta Arc -->
+                                    <path d="M150 140 Q150 70 180 80 T170 120" stroke="#E6A23C" stroke-width="8" fill="none" stroke-linecap="round"/>
+                                    
+                                    <!-- Peripheral Arteries -->
+                                    <path d="M150 250 L100 340 M150 250 L200 340" stroke="#1677C8" stroke-width="6" fill="none"/>
+                                    <path d="M80 160 L30 210 M220 160 L270 210" stroke="#1677C8" stroke-width="5" fill="none"/>
+
+                                    <!-- Clickable Hotspots -->
+                                    <!-- 1. Jantung -->
+                                    <g onclick="showAnatomyInfo('jantung')" class="cursor-pointer hover:opacity-80">
+                                        <circle cx="150" cy="170" r="14" fill="#FFFFFF" opacity="0.3"/>
+                                        <circle cx="150" cy="170" r="8" fill="#DC5B65"/>
+                                        <text x="150" y="174" text-anchor="middle" fill="#FFF" font-size="9" font-weight="bold">1</text>
+                                    </g>
+                                    <!-- 2. Aorta -->
+                                    <g onclick="showAnatomyInfo('aorta')" class="cursor-pointer hover:opacity-80">
+                                        <circle cx="165" cy="75" r="14" fill="#FFFFFF" opacity="0.3"/>
+                                        <circle cx="165" cy="75" r="8" fill="#E6A23C"/>
+                                        <text x="165" y="79" text-anchor="middle" fill="#FFF" font-size="9" font-weight="bold">2</text>
+                                    </g>
+                                    <!-- 3. Arteri Perifer -->
+                                    <g onclick="showAnatomyInfo('arteri')" class="cursor-pointer hover:opacity-80">
+                                        <circle cx="245" cy="195" r="14" fill="#FFFFFF" opacity="0.3"/>
+                                        <circle cx="245" cy="195" r="8" fill="#1677C8"/>
+                                        <text x="245" y="199" text-anchor="middle" fill="#FFF" font-size="9" font-weight="bold">3</text>
+                                    </g>
+                                    <!-- 4. PPG Sensor Node -->
+                                    <g onclick="showAnatomyInfo('ppg')" class="cursor-pointer hover:opacity-80">
+                                        <rect x="20" y="200" width="20" height="20" rx="4" fill="#16A6A1"/>
+                                        <text x="30" y="214" text-anchor="middle" fill="#FFF" font-size="10" font-weight="bold">P</text>
+                                    </g>
+                                    <!-- 5. BIS Electrode Node -->
+                                    <g onclick="showAnatomyInfo('bis')" class="cursor-pointer hover:opacity-80">
+                                        <rect x="190" y="320" width="20" height="20" rx="4" fill="#6B72D6"/>
+                                        <text x="200" y="334" text-anchor="middle" fill="#FFF" font-size="10" font-weight="bold">B</text>
+                                    </g>
+                                </svg>
+                            </div>
+
+                            <!-- Selected Info Panel -->
+                            <div class="w-full md:w-1/2 bg-slate-800 p-4 rounded-xl border border-slate-700">
+                                <div id="anatomyInfoTitle" class="text-sm font-bold text-brand-secondary flex items-center gap-2">
+                                    <i class="fa-solid fa-circle-info"></i> Petunjuk Interaktif
+                                </div>
+                                <div id="anatomyInfoBody" class="text-xs text-gray-300 mt-2 leading-relaxed">
+                                    Klik salah satu nomor atau ikon (1-Jantung, 2-Aorta, 3-Arteri, P-Sensor PPG, B-Elektroda BIS) pada grafik anatomi di samping untuk mengeksplorasi penjelasan prinsip kerja VASCU-TRACE.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ---------------------------------------------------- -->
+                <!-- PAGE 2: MONITORING -->
+                <!-- ---------------------------------------------------- -->
+                <section id="page-monitoring" class="tab-page hidden space-y-6">
+                    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
+                        <div>
+                            <h2 class="text-xl font-bold text-brand-textPrimary dark:text-white">Modul Real-Time Monitoring Simulasi</h2>
+                            <p class="text-xs text-brand-textSecondary dark:text-gray-400">Pengamatan sinyal dual-mode optik photoplethysmography dan bioimpedansi.</p>
+                        </div>
+                        <span class="text-xs bg-amber-100 text-amber-800 font-bold px-3 py-1 rounded-lg">
+                            <i class="fa-solid fa-triangle-exclamation"></i> Status: Sinyal Simulasi Digital
+                        </span>
+                    </div>
+
+                    <!-- MODUL A: OPTICAL PPG MONITORING -->
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm space-y-4">
+                        <div class="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-3">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-xl bg-teal-100 text-brand-secondary flex items-center justify-center font-bold">
+                                    <i class="fa-solid fa-eye"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-base font-bold text-brand-textPrimary dark:text-white">Modul A: Optical PPG Monitoring (Optik 525nm/850nm)</h3>
+                                    <p class="text-xs text-brand-textSecondary dark:text-gray-400">Pencatatan variasi volume darah mikro-vaskular transdermal.</p>
+                                </div>
+                            </div>
+                            <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-brand-success" id="ppgStatusBadge">Sinyal Aktif</span>
+                        </div>
+
+                        <!-- PPG Canvas Graph -->
+                        <div class="relative bg-slate-950 rounded-xl p-3 h-48 w-full overflow-hidden flex items-center">
+                            <canvas id="ppgChartCanvas" class="w-full h-full"></canvas>
+                        </div>
+
+                        <!-- PPG Stats & Controls -->
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                            <div class="p-2.5 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                                <span class="text-[10px] text-gray-500 dark:text-gray-400 block">Denyut Simulasi (BPM)</span>
+                                <span id="ppgBpmVal" class="text-lg font-bold text-brand-primary">74 BPM</span>
+                            </div>
+                            <div class="p-2.5 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                                <span class="text-[10px] text-gray-500 dark:text-gray-400 block">Kualitas Sinyal (SNR)</span>
+                                <span id="ppgSnrVal" class="text-lg font-bold text-brand-success">98.4 %</span>
+                            </div>
+                            <div class="p-2.5 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                                <span class="text-[10px] text-gray-500 dark:text-gray-400 block">Durasi Monitoring</span>
+                                <span id="ppgTimerVal" class="text-lg font-bold text-brand-textPrimary dark:text-white">00:42</span>
+                            </div>
+                            <div class="p-2.5 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                                <span class="text-[10px] text-gray-500 dark:text-gray-400 block">Indeks Perfusi (PI)</span>
+                                <span id="ppgPiVal" class="text-lg font-bold text-brand-secondary">4.2 %</span>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons PPG -->
+                        <div class="flex flex-wrap gap-2 pt-2">
+                            <button onclick="togglePpgSim()" id="btnPpgToggle" class="px-4 py-2 bg-brand-primary text-white text-xs font-bold rounded-lg hover:bg-blue-700">
+                                <i class="fa-solid fa-pause mr-1"></i> Jeda Simulasi
+                            </button>
+                            <button onclick="resetPpgSim()" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-xs font-bold rounded-lg hover:bg-gray-300">
+                                <i class="fa-solid fa-rotate-right mr-1"></i> Reset Waveform
+                            </button>
+                            <button onclick="showPpgDetailsModal()" class="px-4 py-2 border border-brand-primary text-brand-primary text-xs font-bold rounded-lg hover:bg-blue-50 dark:hover:bg-gray-700">
+                                <i class="fa-solid fa-circle-info mr-1"></i> Detail Sinyal
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- MODUL B: BIOIMPEDANCE SPECTROSCOPY (BIS) -->
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm space-y-4">
+                        <div class="flex items-center justify-between border-b border-gray-100 dark:border-gray-700 pb-3">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-xl bg-purple-100 text-brand-accent flex items-center justify-center font-bold">
+                                    <i class="fa-solid fa-bolt"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-base font-bold text-brand-textPrimary dark:text-white">Modul B: Bioimpedance Spectroscopy (BIS)</h3>
+                                    <p class="text-xs text-brand-textSecondary dark:text-gray-400">Pengukuran konduktivitas & respons frekuensi impedansi jaringan vaskular.</p>
+                                </div>
+                            </div>
+                            <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-purple-100 text-brand-accent">AC 50kHz Safe-Current</span>
+                        </div>
+
+                        <!-- BIS Canvas Graph -->
+                        <div class="relative bg-slate-950 rounded-xl p-3 h-48 w-full overflow-hidden flex items-center">
+                            <canvas id="bisChartCanvas" class="w-full h-full"></canvas>
+                        </div>
+
+                        <!-- BIS Stats & Controls -->
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                            <div class="p-2.5 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                                <span class="text-[10px] text-gray-500 dark:text-gray-400 block">Frekuensi Utama</span>
+                                <span class="text-lg font-bold text-brand-accent">50.0 kHz</span>
+                            </div>
+                            <div class="p-2.5 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                                <span class="text-[10px] text-gray-500 dark:text-gray-400 block">Base Impedance (Z0)</span>
+                                <span id="bisZ0Val" class="text-lg font-bold text-brand-textPrimary dark:text-white">45.8 Ω</span>
+                            </div>
+                            <div class="p-2.5 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                                <span class="text-[10px] text-gray-500 dark:text-gray-400 block">Sudut Fase (Phase Angle)</span>
+                                <span id="bisPhaseVal" class="text-lg font-bold text-brand-secondary">-7.4°</span>
+                            </div>
+                            <div class="p-2.5 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                                <span class="text-[10px] text-gray-500 dark:text-gray-400 block">Kapasitansi Selular</span>
+                                <span class="text-lg font-bold text-brand-success">1.42 nF</span>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons BIS -->
+                        <div class="flex flex-wrap gap-2 pt-2">
+                            <button onclick="toggleBisSim()" id="btnBisToggle" class="px-4 py-2 bg-brand-accent text-white text-xs font-bold rounded-lg hover:bg-purple-700">
+                                <i class="fa-solid fa-pause mr-1"></i> Jeda Sweeping
+                            </button>
+                            <button onclick="resetBisSim()" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-xs font-bold rounded-lg hover:bg-gray-300">
+                                <i class="fa-solid fa-rotate-right mr-1"></i> Reset Spektrum
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ---------------------------------------------------- -->
+                <!-- PAGE 3: ANALISIS DUAL-MODE & CENTRAL AORTIC PRESSURE -->
+                <!-- ---------------------------------------------------- -->
+                <section id="page-analisis" class="tab-page hidden space-y-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-brand-textPrimary dark:text-white">Analisis Dual-Mode & Central Aortic Pressure</h2>
+                        <p class="text-xs text-brand-textSecondary dark:text-gray-400">Integrasi sinyal optik PPG dan spektroskopi impedansi untuk rekonstruksi profil tekanan aorta sentral (cuffless).</p>
+                    </div>
+
+                    <!-- Flow Diagrams Dual-Mode Integration -->
+                    <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm">
+                        <h3 class="text-sm font-bold text-brand-textPrimary dark:text-white mb-3">Diagram Alur Integrasi Dual-Mode VASCU-TRACE</h3>
+                        <div class="flex flex-col md:flex-row items-center justify-between gap-3 text-center">
+                            <div class="p-3 bg-teal-50 dark:bg-gray-700 rounded-xl w-full md:w-1/4 border border-teal-200 dark:border-gray-600">
+                                <i class="fa-solid fa-eye text-brand-secondary text-xl mb-1"></i>
+                                <div class="text-xs font-bold">Optical PPG</div>
+                                <span class="text-[10px] text-gray-500">Morfologi Gelombang Denyut</span>
+                            </div>
+                            <i class="fa-solid fa-arrow-down md:fa-arrow-right text-brand-primary"></i>
+                            <div class="p-3 bg-purple-50 dark:bg-gray-700 rounded-xl w-full md:w-1/4 border border-purple-200 dark:border-gray-600">
+                                <i class="fa-solid fa-bolt text-brand-accent text-xl mb-1"></i>
+                                <div class="text-xs font-bold">Bioimpedance (BIS)</div>
+                                <span class="text-[10px] text-gray-500">Volumetrik & Hemodinamika</span>
+                            </div>
+                            <i class="fa-solid fa-arrow-down md:fa-arrow-right text-brand-primary"></i>
+                            <div class="p-3 bg-blue-50 dark:bg-gray-700 rounded-xl w-full md:w-1/4 border border-blue-200 dark:border-gray-600">
+                                <i class="fa-solid fa-microchip text-brand-primary text-xl mb-1"></i>
+                                <div class="text-xs font-bold">Signal Integration</div>
+                                <span class="text-[10px] text-gray-500">Kalibrasi Dual-Edge</span>
+                            </div>
+                            <i class="fa-solid fa-arrow-down md:fa-arrow-right text-brand-primary"></i>
+                            <div class="p-3 bg-emerald-50 dark:bg-gray-700 rounded-xl w-full md:w-1/4 border border-emerald-200 dark:border-gray-600">
+                                <i class="fa-solid fa-heart-circle-check text-brand-success text-xl mb-1"></i>
+                                <div class="text-xs font-bold">Aortic Profile</div>
+                                <span class="text-[10px] text-gray-500">Estimasi Cuffless CAP</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Central Aortic Pressure Profiling Panel -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- Left Panel: CAP Parameters -->
+                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm space-y-4">
+                            <h3 class="text-sm font-bold text-brand-textPrimary dark:text-white flex items-center gap-2">
+                                <i class="fa-solid fa-heart-pulse text-brand-danger"></i> Central Aortic Parameters
+                            </h3>
+
+                            <div class="space-y-3">
+                                <div class="p-3 bg-gray-50 dark:bg-gray-700 rounded-xl flex justify-between items-center">
+                                    <span class="text-xs font-medium">Systolic Aortic (cSBP)</span>
+                                    <span class="text-base font-extrabold text-brand-danger">118 mmHg</span>
+                                </div>
+                                <div class="p-3 bg-gray-50 dark:bg-gray-700 rounded-xl flex justify-between items-center">
+                                    <span class="text-xs font-medium">Diastolic Aortic (cDBP)</span>
+                                    <span class="text-base font-extrabold text-brand-primary">76 mmHg</span>
+                                </div>
+                                <div class="p-3 bg-gray-50 dark:bg-gray-700 rounded-xl flex justify-between items-center">
+                                    <span class="text-xs font-medium">Central Pulse Pressure (cPP)</span>
+                                    <span class="text-base font-extrabold text-brand-accent">42 mmHg</span>
+                                </div>
+                                <div class="p-3 bg-gray-50 dark:bg-gray-700 rounded-xl flex justify-between items-center">
+                                    <span class="text-xs font-medium">Mean Arterial Pressure (MAP)</span>
+                                    <span class="text-base font-extrabold text-brand-secondary">90 mmHg</span>
+                                </div>
+                                <div class="p-3 bg-gray-50 dark:bg-gray-700 rounded-xl flex justify-between items-center">
+                                    <span class="text-xs font-medium">Augmentation Index (AIx@75)</span>
+                                    <span class="text-base font-extrabold text-brand-success">+14 %</span>
+                                </div>
+                            </div>
+
+                            <div class="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
+                                Estimasi tekanan aorta sentral memerlukan algoritma kalibrasi, referensi pengukuran, dan validasi klinis. Nilai pada prototipe ini hanya untuk demonstrasi.
+                            </div>
+                        </div>
+
+                        <!-- Right Panel: Combined Pressure Waveform Canvas -->
+                        <div class="lg:col-span-2 bg-white dark:bg-gray-800 p-5 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm flex flex-col justify-between">
+                            <div>
+                                <h3 class="text-sm font-bold text-brand-textPrimary dark:text-white mb-1">Rekonstruksi Gelombang Tekanan Aorta Sentral vs Perifer</h3>
+                                <p class="text-xs text-brand-textSecondary dark:text-gray-400 mb-4">Perbandingan bentuk gelombang denyut aorta (merah) dan arteri brakialis/radialis (biru).</p>
+                                <div class="bg-slate-950 rounded-xl p-3 h-64 w-full">
+                                    <canvas id="capChartCanvas" class="w-full h-full"></canvas>
+                                </div>
+                            </div>
+                            <div class="mt-4 flex items-center justify-between text-xs text-brand-textSecondary dark:text-gray-400 border-t border-gray-100 dark:border-gray-700 pt-3">
+                                <span>Amplifikasi Pulsa: Normal (+8 mmHg)</span>
+                                <span>Transfer Function: Transfer Matrix Modulasi</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ---------------------------------------------------- -->
+                <!-- PAGE 4: AUTOTRIAGE ARTERIOSKLEROSIS -->
+                <!-- ---------------------------------------------------- -->
+                <section id="page-autotriage" class="tab-page hidden space-y-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-brand-textPrimary dark:text-white">Simulasi Autotriage Arteriosklerosis</h2>
+                        <p class="text-xs text-brand-textSecondary dark:text-gray-400">Pengelompokan tingkat prioritas pemeriksaan risiko arteriosklerosis berbasis faktor risiko dan profil vaskular.</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <!-- Risk Factors Form -->
+                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm space-y-4">
+                            <h3 class="text-sm font-bold text-brand-textPrimary dark:text-white flex items-center gap-2">
+                                <i class="fa-solid fa-clipboard-list text-brand-primary"></i> Input Faktor Risiko
+                            </h3>
+
+                            <form id="triageForm" onsubmit="calculateAutotriage(event)" class="space-y-3">
+                                <div>
+                                    <label class="block text-xs font-semibold mb-1">Usia Pengguna (Tahun)</label>
+                                    <input type="number" id="triageAge" value="45" min="15" max="100" class="w-full px-3 py-2 text-xs rounded-lg border border-brand-border dark:border-gray-600 dark:bg-gray-700">
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold mb-1">Riwayat Hipertensi</label>
+                                    <select id="triageHtn" class="w-full px-3 py-2 text-xs rounded-lg border border-brand-border dark:border-gray-600 dark:bg-gray-700">
+                                        <option value="0">Tidak Ada</option>
+                                        <option value="1">Terkontrol dengan Obat</option>
+                                        <option value="2">Hipertensi Tidak Terkontrol</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold mb-1">Riwayat Diabetes Mellitus</label>
+                                    <select id="triageDm" class="w-full px-3 py-2 text-xs rounded-lg border border-brand-border dark:border-gray-600 dark:bg-gray-700">
+                                        <option value="0">Tidak Ada</option>
+                                        <option value="1">Tipe 2 / Prediabetes</option>
+                                        <option value="2">Tipe 1 / Tidak Terkontrol</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold mb-1">Kebiasaan Merokok</label>
+                                    <select id="triageSmoker" class="w-full px-3 py-2 text-xs rounded-lg border border-brand-border dark:border-gray-600 dark:bg-gray-700">
+                                        <option value="0">Tidak Pernah / Sudah Berhenti</option>
+                                        <option value="1">Perokok Aktif Perantara (&lt;10 batang/hari)</option>
+                                        <option value="2">Perokok Berat (&gt;10 batang/hari)</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-semibold mb-1">Riwayat Keluarga Penyakit Jantung</label>
+                                    <select id="triageFamily" class="w-full px-3 py-2 text-xs rounded-lg border border-brand-border dark:border-gray-600 dark:bg-gray-700">
+                                        <option value="0">Tidak Ada</option>
+                                        <option value="1">Ada (Orang Tua / Saudara)</option>
+                                    </select>
+                                </div>
+
+                                <button type="submit" class="w-full py-2.5 bg-brand-primary text-white text-xs font-bold rounded-lg hover:bg-blue-700 shadow">
+                                    Jalankan Simulasi Triage <i class="fa-solid fa-calculator ml-1"></i>
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Result Display Panel -->
+                        <div class="lg:col-span-2 bg-white dark:bg-gray-800 p-5 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm flex flex-col justify-between space-y-4">
+                            <div>
+                                <h3 class="text-sm font-bold text-brand-textPrimary dark:text-white mb-3">Hasil Evaluasi Autotriage & Prioritas</h3>
+                                
+                                <div id="triageResultBox" class="p-5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
+                                    <div id="triageBadgeIcon" class="w-16 h-16 rounded-full bg-emerald-100 text-brand-success flex items-center justify-center text-3xl shrink-0">
+                                        <i class="fa-solid fa-circle-check"></i>
+                                    </div>
+                                    <div class="space-y-1">
+                                        <span id="triagePriorityTag" class="text-xs font-extrabold tracking-wider uppercase text-brand-success">LOW PRIORITY (PRIORITAS RENDAH)</span>
+                                        <h4 id="triageTitle" class="text-lg font-bold text-gray-900 dark:text-white">Profil VASCU-TRACE Dalam Batas Normal</h4>
+                                        <p id="triageDesc" class="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+                                            Berdasarkan parameter simulasi, kekakuan arteri dan estimasi tekanan aorta sentral berada dalam rentang toleransi fisiologis normal.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Recommended Action Items -->
+                                <div class="mt-4 space-y-2">
+                                    <h4 class="text-xs font-bold text-brand-textPrimary dark:text-white">Rekomendasi Tindak Lanjut Umum:</h4>
+                                    <ul id="triageRecList" class="text-xs text-brand-textSecondary dark:text-gray-300 space-y-1.5 list-disc pl-4">
+                                        <li>Pertahankan pola hidup sehat, konsumsi gizi seimbang, dan olahraga teratur.</li>
+                                        <li>Lakukan pemeriksaan profil pembuluh darah berkala setiap 6 - 12 bulan di fasilitas pelayanan kesehatan primer.</li>
+                                        <li>Konsultasi tenaga kesehatan jika timbul gejala klinis seperti nyeri dada atau sesak napas.</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <!-- Autotriage Disclaimer & Save Action -->
+                            <div class="border-t border-gray-100 dark:border-gray-700 pt-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+                                <p class="text-[10px] text-brand-textSecondary dark:text-gray-400 italic">
+                                    Hasil autotriage merupakan simulasi edukatif dan bukan diagnosis klinis arteriosklerosis medis.
+                                </p>
+                                <div class="flex gap-2 w-full sm:w-auto">
+                                    <button onclick="saveTriageToHistory()" class="flex-1 sm:flex-initial px-4 py-2 bg-brand-secondary text-white text-xs font-bold rounded-lg hover:bg-teal-700">
+                                        <i class="fa-solid fa-floppy-disk mr-1"></i> Simpan Hasil Sesi
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ---------------------------------------------------- -->
+                <!-- PAGE 5: RIWAYAT AKTIVITAS -->
+                <!-- ---------------------------------------------------- -->
+                <section id="page-riwayat" class="tab-page hidden space-y-6">
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div>
+                            <h2 class="text-xl font-bold text-brand-textPrimary dark:text-white">Riwayat Aktivitas & Log Simulasi</h2>
+                            <p class="text-xs text-brand-textSecondary dark:text-gray-400">Daftar rekam jejak pemeriksaan simulasi yang pernah dilakukan.</p>
+                        </div>
+                        <button onclick="clearHistoryLogs()" class="text-xs font-bold text-brand-danger hover:underline">
+                            <i class="fa-solid fa-trash-can mr-1"></i> Bersihkan Seluruh Riwayat
+                        </button>
+                    </div>
+
+                    <!-- Search & Filter Controls -->
+                    <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm flex flex-col sm:flex-row gap-3">
+                        <div class="relative flex-1">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-xs text-gray-400"></i>
+                            <input type="text" id="historySearchInput" onkeyup="filterHistoryLogs()" placeholder="Cari tanggal atau jenis simulasi..." class="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-brand-border dark:border-gray-600 dark:bg-gray-700">
+                        </div>
+                        <select id="historyCategoryFilter" onchange="filterHistoryLogs()" class="px-3 py-2 text-xs rounded-xl border border-brand-border dark:border-gray-600 dark:bg-gray-700">
+                            <option value="all">Semua Kategori</option>
+                            <option value="Autotriage">Autotriage</option>
+                            <option value="Monitoring">Monitoring PPG/BIS</option>
+                        </select>
+                    </div>
+
+                    <!-- Table Desktop / Cards Mobile Container -->
+                    <div class="bg-white dark:bg-gray-800 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="bg-gray-50 dark:bg-gray-700/50 text-[11px] font-bold text-brand-textSecondary dark:text-gray-300 uppercase tracking-wider">
+                                    <tr>
+                                        <th class="p-3.5">Waktu / Tanggal</th>
+                                        <th class="p-3.5">Jenis Aktivitas</th>
+                                        <th class="p-3.5">Status Prioritas / Hasil</th>
+                                        <th class="p-3.5">Detail Ringkas</th>
+                                        <th class="p-3.5 text-right">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="historyTableBody" class="text-xs divide-y divide-gray-100 dark:divide-gray-700">
+                                    <!-- Dynamic rows via JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Empty State Notice -->
+                        <div id="historyEmptyState" class="hidden p-8 text-center space-y-2">
+                            <i class="fa-solid fa-folder-open text-3xl text-gray-300"></i>
+                            <p class="text-xs font-semibold text-gray-500">Belum ada riwayat aktivitas yang tersimpan.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ---------------------------------------------------- -->
+                <!-- PAGE 6: PUSAT EDUKASI -->
+                <!-- ---------------------------------------------------- -->
+                <section id="page-edukasi" class="tab-page hidden space-y-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-brand-textPrimary dark:text-white">Pusat Edukasi Kesehatan & Teknologi VASCU-TRACE</h2>
+                        <p class="text-xs text-brand-textSecondary dark:text-gray-400">Pelajari konsep medis, fisiologi vaskular, dan dasar ilmiah teknologi PPG & BIS.</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- Module 1 -->
+                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm space-y-2">
+                            <span class="text-[10px] font-bold text-brand-primary bg-blue-50 dark:bg-blue-900/40 px-2 py-0.5 rounded">Sensori Optik</span>
+                            <h3 class="text-base font-bold text-brand-textPrimary dark:text-white">1. Apa itu Optical PPG?</h3>
+                            <p class="text-xs text-brand-textSecondary dark:text-gray-300 leading-relaxed">
+                                Photoplethysmography (PPG) adalah teknik optik non-invasif yang mengukur perubahan volume darah mikro-vaskular di bawah jaringan kulit menggunakan iluminasi LED dan photodetector.
+                            </p>
+                        </div>
+
+                        <!-- Module 2 -->
+                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm space-y-2">
+                            <span class="text-[10px] font-bold text-brand-accent bg-purple-50 dark:bg-purple-900/40 px-2 py-0.5 rounded">Spektroskopi</span>
+                            <h3 class="text-base font-bold text-brand-textPrimary dark:text-white">2. Cara Kerja Bioimpedance Spectroscopy (BIS)?</h3>
+                            <p class="text-xs text-brand-textSecondary dark:text-gray-300 leading-relaxed">
+                                BIS mengalirkan arus bolak-balik (AC) beramplitudo sangat rendah dan frekuensi bervariasi untuk mengukur perlawanan (impedansi) dan respon konduktivitas listrik cairan darah & jaringan vaskular.
+                            </p>
+                        </div>
+
+                        <!-- Module 3 -->
+                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm space-y-2">
+                            <span class="text-[10px] font-bold text-brand-danger bg-red-50 dark:bg-red-900/40 px-2 py-0.5 rounded">Hemodinamika</span>
+                            <h3 class="text-base font-bold text-brand-textPrimary dark:text-white">3. Apa itu Tekanan Aorta Sentral (CAP)?</h3>
+                            <p class="text-xs text-brand-textSecondary dark:text-gray-300 leading-relaxed">
+                                Tekanan darah langsung di muara organ jantung (aorta asenden). Tekanan ini memberikan gambaran beban kerja sesungguhnya yang dialami organ vital (jantung, otak, dan ginjal).
+                            </p>
+                        </div>
+
+                        <!-- Module 4 -->
+                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm space-y-2">
+                            <span class="text-[10px] font-bold text-brand-warning bg-amber-50 dark:bg-amber-900/40 px-2 py-0.5 rounded">Patofisiologi</span>
+                            <h3 class="text-base font-bold text-brand-textPrimary dark:text-white">4. Perbedaan Tekanan Perifer vs Sentral</h3>
+                            <p class="text-xs text-brand-textSecondary dark:text-gray-300 leading-relaxed">
+                                Tekanan darah manset lengan (brakialis) sering kali lebih tinggi akibat fenomena penguatan gelombang denyut perifer (pulse pressure amplification), sedangkan tekanan aorta sentral lebih mencerminkan risiko kardiovaskular.
+                            </p>
+                        </div>
+
+                        <!-- Module 5 -->
+                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm space-y-2">
+                            <span class="text-[10px] font-bold text-brand-secondary bg-teal-50 dark:bg-teal-900/40 px-2 py-0.5 rounded">Vaskular</span>
+                            <h3 class="text-base font-bold text-brand-textPrimary dark:text-white">5. Karakteristik Arteriosklerosis</h3>
+                            <p class="text-xs text-brand-textSecondary dark:text-gray-300 leading-relaxed">
+                                Pengerasan dinding pembuluh darah arteri akibat penuaan atau pembentukan plak yang menyebabkan kecepatan gelombang pulsa (PWV) meningkat dan penurunan elastisitas dinding pembuluh darah.
+                            </p>
+                        </div>
+
+                        <!-- Module 6 -->
+                        <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl border border-brand-border dark:border-gray-700 shadow-sm space-y-2">
+                            <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/40 px-2 py-0.5 rounded">Inovasi Teknologi</span>
+                            <h3 class="text-base font-bold text-brand-textPrimary dark:text-white">6. Mengapa Integrasi Dual-Mode Sangat Menarik?</h3>
+                            <p class="text-xs text-brand-textSecondary dark:text-gray-300 leading-relaxed">
+                                Sinyal optik PPG sensitif terhadap perubahan bentuk pulsa mikro, sedangkan BIS sensitif terhadap perubahan volume darah makro. Penggabungan keduanya meningkatkan akurasi estimasi cuffless.
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
+            </div>
+
+            <!-- ========================================================= -->
+            <!-- BOTTOM NAVIGATION (MOBILE ONLY) -->
+            <!-- ========================================================= -->
+            <nav class="md:hidden border-t border-brand-border dark:border-gray-700 bg-white dark:bg-gray-800 fixed bottom-0 left-0 right-0 h-16 flex items-center justify-around z-30 px-2">
+                <button onclick="switchTab('beranda')" id="mobileNav-beranda" class="nav-mobile-link flex flex-col items-center justify-center w-full text-brand-primary">
+                    <i class="fa-solid fa-house text-lg"></i>
+                    <span class="text-[10px] font-semibold mt-0.5">Beranda</span>
+                </button>
+                <button onclick="switchTab('monitoring')" id="mobileNav-monitoring" class="nav-mobile-link flex flex-col items-center justify-center w-full text-brand-textSecondary dark:text-gray-400">
+                    <i class="fa-solid fa-wave-square text-lg"></i>
+                    <span class="text-[10px] font-semibold mt-0.5">Monitor</span>
+                </button>
+                <button onclick="switchTab('analisis')" id="mobileNav-analisis" class="nav-mobile-link flex flex-col items-center justify-center w-full text-brand-textSecondary dark:text-gray-400">
+                    <i class="fa-solid fa-chart-line text-lg"></i>
+                    <span class="text-[10px] font-semibold mt-0.5">Analisis</span>
+                </button>
+                <button onclick="switchTab('autotriage')" id="mobileNav-autotriage" class="nav-mobile-link flex flex-col items-center justify-center w-full text-brand-textSecondary dark:text-gray-400">
+                    <i class="fa-solid fa-stethoscope text-lg"></i>
+                    <span class="text-[10px] font-semibold mt-0.5">Triage</span>
+                </button>
+                <button onclick="switchTab('riwayat')" id="mobileNav-riwayat" class="nav-mobile-link flex flex-col items-center justify-center w-full text-brand-textSecondary dark:text-gray-400">
+                    <i class="fa-solid fa-clock-rotate-left text-lg"></i>
+                    <span class="text-[10px] font-semibold mt-0.5">Riwayat</span>
+                </button>
+            </nav>
+
+        </main>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- GLOBAL MODALS (SETTINGS, PROFIL, FAQ, BANTUAN, TENTANG) -->
+    <!-- ========================================================= -->
+
+    <!-- Profile Edit Modal -->
+    <div id="profileEditModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full p-6 border border-brand-border dark:border-gray-700">
+            <div class="flex justify-between items-center pb-3 border-b border-gray-100 dark:border-gray-700">
+                <h3 class="text-base font-bold text-brand-textPrimary dark:text-white">Edit Profil Pengguna</h3>
+                <button onclick="closeModal('profileEditModal')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="saveUserProfileEdit(event)" class="space-y-3 mt-4">
+                <div>
+                    <label class="block text-xs font-semibold mb-1">Nama Lengkap</label>
+                    <input type="text" id="editName" required class="w-full px-3 py-2 text-xs rounded-lg border border-brand-border dark:border-gray-600 dark:bg-gray-700">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold mb-1">Peran Pengguna</label>
+                    <select id="editRole" class="w-full px-3 py-2 text-xs rounded-lg border border-brand-border dark:border-gray-600 dark:bg-gray-700">
+                        <option value="Tenaga Kesehatan">Tenaga Kesehatan</option>
+                        <option value="Peneliti">Peneliti</option>
+                        <option value="Pengguna Umum">Pengguna Umum</option>
+                        <option value="Administrator">Administrator</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold mb-1">Kota / Domisili</label>
+                    <input type="text" id="editCity" class="w-full px-3 py-2 text-xs rounded-lg border border-brand-border dark:border-gray-600 dark:bg-gray-700">
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="closeModal('profileEditModal')" class="px-4 py-2 border text-xs rounded-lg font-bold">Batal</button>
+                    <button type="submit" class="px-4 py-2 bg-brand-primary text-white text-xs font-bold rounded-lg hover:bg-blue-700">Simpan Perubahan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full p-6 border border-brand-border dark:border-gray-700 space-y-4">
+            <div class="flex justify-between items-center pb-3 border-b border-gray-100 dark:border-gray-700">
+                <h3 class="text-base font-bold text-brand-textPrimary dark:text-white">Pengaturan Aplikasi</h3>
+                <button onclick="closeModal('settingsModal')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <!-- Dark / Light Theme -->
+            <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
+                <div>
+                    <span class="text-xs font-bold block">Mode Tampilan Terapkan</span>
+                    <span class="text-[11px] text-gray-500 dark:text-gray-400">Pilih Tema Terang atau Gelap</span>
+                </div>
+                <button onclick="toggleDarkMode()" class="px-3 py-1.5 bg-brand-primary text-white text-xs font-bold rounded-lg">
+                    <i class="fa-solid fa-circle-half-stroke mr-1"></i> Ganti Tema
+                </button>
+            </div>
+
+            <!-- Text Sizing -->
+            <div class="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl space-y-2">
+                <span class="text-xs font-bold block">Ukuran Teks Aplikasi</span>
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="setTextSize('sm')" class="py-1.5 bg-white dark:bg-gray-600 border border-brand-border text-xs font-semibold rounded-lg hover:bg-blue-50">Kecil</button>
+                    <button onclick="setTextSize('normal')" class="py-1.5 bg-white dark:bg-gray-600 border border-brand-border text-xs font-semibold rounded-lg hover:bg-blue-50">Normal</button>
+                    <button onclick="setTextSize('lg')" class="py-1.5 bg-white dark:bg-gray-600 border border-brand-border text-xs font-semibold rounded-lg hover:bg-blue-50">Besar</button>
+                </div>
+            </div>
+
+            <div class="flex justify-end pt-2">
+                <button onclick="closeModal('settingsModal')" class="px-4 py-2 bg-brand-primary text-white text-xs font-bold rounded-lg">Selesai</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- FAQ Accordion Modal -->
+    <div id="faqModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-lg w-full p-6 border border-brand-border dark:border-gray-700 space-y-4 max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-center pb-3 border-b border-gray-100 dark:border-gray-700">
+                <h3 class="text-base font-bold text-brand-textPrimary dark:text-white">FAQ (Pertanyaan Sering Diajukan)</h3>
+                <button onclick="closeModal('faqModal')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="space-y-2 text-xs">
+                <!-- FAQ Item 1 -->
+                <details class="group p-3 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                    <summary class="font-bold cursor-pointer list-none flex justify-between items-center text-brand-primary dark:text-blue-400">
+                        Apa itu VASCU-TRACE? <i class="fa-solid fa-chevron-down text-[10px] group-open:rotate-180 transition"></i>
+                    </summary>
+                    <p class="mt-2 text-gray-600 dark:text-gray-300 leading-relaxed">
+                        VASCU-TRACE adalah konseptual web app untuk estimasi profil tekanan aorta sentral tanpa manset dan autotriage arteriosklerosis berbasis dual-mode optik PPG dan spektroskopi impedansi.
+                    </p>
+                </details>
+                <!-- FAQ Item 2 -->
+                <details class="group p-3 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                    <summary class="font-bold cursor-pointer list-none flex justify-between items-center text-brand-primary dark:text-blue-400">
+                        Apakah aplikasi ini alat medis tervalidasi? <i class="fa-solid fa-chevron-down text-[10px] group-open:rotate-180 transition"></i>
+                    </summary>
+                    <p class="mt-2 text-gray-600 dark:text-gray-300 leading-relaxed">
+                        Tidak. Sistem ini merupakan prototipe simulasi dan riset konseptual. Hasil tidak boleh dijadikan pengganti diagnosis klinis resmi.
+                    </p>
+                </details>
+                <!-- FAQ Item 3 -->
+                <details class="group p-3 bg-gray-50 dark:bg-gray-700 rounded-xl">
+                    <summary class="font-bold cursor-pointer list-none flex justify-between items-center text-brand-primary dark:text-blue-400">
+                        Bagaimana cara menghubungi tim bantuan? <i class="fa-solid fa-chevron-down text-[10px] group-open:rotate-180 transition"></i>
+                    </summary>
+                    <p class="mt-2 text-gray-600 dark:text-gray-300 leading-relaxed">
+                        Anda dapat mengakses menu Pusat Bantuan untuk menghubungi hotline WhatsApp pengembang di nomor 081331965094.
+                    </p>
+                </details>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Center Modal -->
+    <div id="helpModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-sm w-full p-6 border border-brand-border dark:border-gray-700 text-center space-y-4">
+            <div class="w-14 h-14 bg-emerald-100 text-brand-success rounded-full flex items-center justify-center text-2xl mx-auto">
+                <i class="fa-solid fa-headset"></i>
+            </div>
+            <h3 class="text-base font-bold text-brand-textPrimary dark:text-white">Pusat Bantuan & Layanan</h3>
+            <p class="text-xs text-brand-textSecondary dark:text-gray-300">
+                Hubungi saluran komunikasi resmi untuk pertanyaan teknis seputar prototipe VASCU-TRACE.
+            </p>
+            <div class="p-3 bg-gray-50 dark:bg-gray-700 rounded-xl text-xs font-mono font-bold text-brand-primary">
+                081331965094
+            </div>
+            <div class="flex flex-col gap-2">
+                <a href="https://wa.me/6281331965094?text=Halo%20Tim%20VASCU-TRACE,%20saya%20butuh%20bantuan%20mengenai%20aplikasi." target="_blank" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2">
+                    <i class="fa-brands fa-whatsapp text-sm"></i> Hubungi via WhatsApp
+                </a>
+                <button onclick="copyHelpNumber()" class="w-full py-2 border border-brand-border text-xs font-bold rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <i class="fa-solid fa-copy mr-1"></i> Salin Nomor Telepon
+                </button>
+            </div>
+            <button onclick="closeModal('helpModal')" class="text-xs text-gray-400 hover:underline">Tutup</button>
+        </div>
+    </div>
+
+    <!-- About Modal -->
+    <div id="aboutModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-lg w-full p-6 border border-brand-border dark:border-gray-700 space-y-4 max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-center pb-3 border-b border-gray-100 dark:border-gray-700">
+                <h3 class="text-base font-bold text-brand-textPrimary dark:text-white">Tentang VASCU-TRACE</h3>
+                <button onclick="closeModal('aboutModal')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="space-y-3 text-xs text-brand-textSecondary dark:text-gray-300 leading-relaxed">
+                <p><strong class="text-brand-primary">VASCU-TRACE</strong> (Vascular Transdermal Aortic Calibration & Edge System) dirancang sebagai konsep solusi skrining kardiovaskular dini tanpa manset (cuffless) pada level Pelayanan Kesehatan Primer (Puskesmas/Klinik).</p>
+                <p>Platform mengolaborasikan sensor Dual-Mode Optik (Green/IR) dan Bioimpedance Spectroscopy (BIS) untuk merekonstruksi kurva tekanan aorta sentral serta mengevaluasi kekakuan pembuluh darah secara realtime.</p>
+                <div class="p-3 bg-blue-50 dark:bg-blue-950/40 rounded-xl border border-blue-200 dark:border-blue-800 text-[11px] text-blue-900 dark:text-blue-300">
+                    <strong>Status Prototipe:</strong> Generasi v1.0.4 (Konseptual Demonstration Suite).
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast Modal -->
+    <div id="notificationModal" class="hidden fixed top-16 right-4 z-50 w-72 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-brand-border dark:border-gray-700 p-4 space-y-2">
+        <div class="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700">
+            <h4 class="text-xs font-bold text-brand-textPrimary dark:text-white">Notifikasi Sistem</h4>
+            <button onclick="toggleNotificationModal()" class="text-gray-400 text-xs"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="space-y-2 text-xs">
+            <div class="p-2 bg-blue-50 dark:bg-gray-700 rounded-lg">
+                <span class="font-bold text-brand-primary block">Kalibrasi Sinyal</span>
+                <span class="text-[11px] text-gray-500 dark:text-gray-300">Sinyal PPG Optik dan BIS telah tersinkronisasi.</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detail PPG Modal -->
+    <div id="ppgDetailModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full p-6 border border-brand-border dark:border-gray-700 space-y-3">
+            <h3 class="text-base font-bold text-brand-textPrimary dark:text-white">Detail Spesifikasi Optik PPG</h3>
+            <ul class="text-xs space-y-1.5 text-gray-600 dark:text-gray-300">
+                <li>• Dual Wavelength: 525 nm (Green) & 850 nm (Infrared)</li>
+                <li>• Sampling Rate: 500 Hz High Resolution</li>
+                <li>• Signal Filtering: Bandpass Digital Filter (0.5Hz - 8Hz)</li>
+                <li>• Motion Artifact Suppression: Active Noise Cancellation</li>
+            </ul>
+            <div class="flex justify-end pt-2">
+                <button onclick="closeModal('ppgDetailModal')" class="px-4 py-1.5 bg-brand-primary text-white text-xs font-bold rounded-lg">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- JAVASCRIPT APPLICATION CORE LOGIC -->
+    <!-- ========================================================= -->
+    <script>
+        // Global State Management
+        let userProfile = {
+            name: '',
+            dob: '',
+            gender: 'Laki-laki',
+            height: '170',
+            city: '',
+            role: 'Tenaga Kesehatan'
+        };
+
+        let historyLogs = [
+            { id: 1, date: '2026-11-18 08:30', category: 'Autotriage', priority: 'LOW PRIORITY', desc: 'Evaluasi Skrining Arteriosklerosis Normal' },
+            { id: 2, date: '2026-11-17 14:15', category: 'Monitoring', priority: 'NORMAL', desc: 'Monitoring PPG & BIS 5 Menit' }
+        ];
+
+        let ppgRunning = true;
+        let bisRunning = true;
+        let ppgTimerSeconds = 42;
+        let ppgChartInstance = null;
+        let bisChartInstance = null;
+        let capChartInstance = null;
+        let ppgAnimId = null;
+
+        // Initialization Window Load
+        window.onload = function() {
+            loadStoredProfile();
+            updateDateDisplay();
+            initPpgChart();
+            initBisChart();
+            initCapChart();
+            renderHistoryLogs();
+            startTimerLoop();
+        };
+
+        // Date Display
+        function updateDateDisplay() {
+            const now = new Date();
+            const options = { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' };
+            const dateStr = now.toLocaleDateString('id-ID', options);
+            const dateElem = document.getElementById('currentDateDisplay');
+            if (dateElem) dateElem.innerText = dateStr;
+
+            const hour = now.getHours();
+            let greeting = "Selamat Pagi,";
+            if (hour >= 11 && hour < 15) greeting = "Selamat Siang,";
+            else if (hour >= 15 && hour < 18) greeting = "Selamat Sore,";
+            else if (hour >= 18 || hour < 4) greeting = "Selamat Malam,";
+            
+            const timeGreeting = document.getElementById('timeGreeting');
+            if (timeGreeting) timeGreeting.innerText = greeting;
+        }
+
+        // Profile Storage & Onboarding Logic
+        function loadStoredProfile() {
+            const saved = localStorage.getItem('vascu_user_profile');
+            if (saved) {
+                try {
+                    userProfile = JSON.parse(saved);
+                    document.getElementById('onboardingModal').classList.add('hidden');
+                    updateUserUI();
+                } catch(e) {
+                    showOnboarding();
+                }
+            } else {
+                showOnboarding();
+            }
+        }
+
+        function showOnboarding() {
+            document.getElementById('onboardingModal').classList.remove('hidden');
+            goToOnboardingStep(1);
+        }
+
+        function goToOnboardingStep(step) {
+            document.getElementById('onboardingStep1').classList.add('hidden');
+            document.getElementById('onboardingStep2').classList.add('hidden');
+            document.getElementById('onboardingStep3').classList.add('hidden');
+
+            document.getElementById(`onboardingStep${step}`).classList.remove('hidden');
+        }
+
+        function saveUserProfile(e) {
+            e.preventDefault();
+            userProfile.name = document.getElementById('inputName').value || 'Pengguna VASCU';
+            userProfile.dob = document.getElementById('inputDob').value;
+            userProfile.gender = document.getElementById('inputGender').value;
+            userProfile.height = document.getElementById('inputHeight').value;
+            userProfile.city = document.getElementById('inputCity').value || 'Indonesia';
+            userProfile.role = document.getElementById('inputRole').value;
+
+            localStorage.setItem('vascu_user_profile', JSON.stringify(userProfile));
+            updateUserUI();
+            
+            document.getElementById('welcomeUserName').innerText = userProfile.name;
+            goToOnboardingStep(3);
+        }
+
+        function updateUserUI() {
+            document.getElementById('headerUserName').innerText = userProfile.name;
+            document.getElementById('headerUserRole').innerText = userProfile.role;
+            document.getElementById('dropdownName').innerText = userProfile.name;
+            document.getElementById('dropdownRole').innerText = userProfile.role;
+            
+            const firstChar = userProfile.name ? userProfile.name.charAt(0).toUpperCase() : 'U';
+            document.getElementById('userAvatarText').innerText = firstChar;
+        }
+
+        function closeOnboarding() {
+            document.getElementById('onboardingModal').classList.add('hidden');
+        }
+
+        function resetProfile() {
+            if (confirm("Apakah Anda yakin ingin mereset profil pengguna tersimpan?")) {
+                localStorage.removeItem('vascu_user_profile');
+                location.reload();
+            }
+        }
+
+        // Tab Navigation Router
+        function switchTab(tabId) {
+            // Hide all tab pages
+            const pages = document.querySelectorAll('.tab-page');
+            pages.forEach(p => p.classList.add('hidden'));
+
+            // Show selected
+            const activePage = document.getElementById(`page-${tabId}`);
+            if (activePage) activePage.classList.remove('hidden');
+
+            // Update Desktop SideNav Styling
+            document.querySelectorAll('.nav-side-link').forEach(btn => {
+                btn.classList.remove('text-brand-primary', 'bg-blue-50', 'dark:bg-blue-900/30');
+                btn.classList.add('text-brand-textSecondary', 'dark:text-gray-300');
+            });
+            const activeSideNav = document.getElementById(`sideNav-${tabId}`);
+            if (activeSideNav) {
+                activeSideNav.classList.remove('text-brand-textSecondary', 'dark:text-gray-300');
+                activeSideNav.classList.add('text-brand-primary', 'bg-blue-50', 'dark:bg-blue-900/30');
+            }
+
+            // Update Mobile BottomNav Styling
+            document.querySelectorAll('.nav-mobile-link').forEach(btn => {
+                btn.classList.remove('text-brand-primary');
+                btn.classList.add('text-brand-textSecondary', 'dark:text-gray-400');
+            });
+            const activeMobileNav = document.getElementById(`mobileNav-${tabId}`);
+            if (activeMobileNav) {
+                activeMobileNav.classList.remove('text-brand-textSecondary', 'dark:text-gray-400');
+                activeMobileNav.classList.add('text-brand-primary');
+            }
+
+            // Scroll to top
+            document.getElementById('mainScrollContainer').scrollTop = 0;
+        }
+
+        // Interactive Anatomy Hotspots
+        function showAnatomyInfo(key) {
+            const titleEl = document.getElementById('anatomyInfoTitle');
+            const bodyEl = document.getElementById('anatomyInfoBody');
+
+            const infoMap = {
+                'jantung': {
+                    title: '<i class="fa-solid fa-heart text-brand-danger"></i> 1. Organ Jantung & Ejeksi Aorta',
+                    text: 'Jantung memompa darah ke seluruh tubuh. Kontraksi ventrikel kiri memicu gelombang impuls tekanan utama pada muara aorta sentral.'
+                },
+                'aorta': {
+                    title: '<i class="fa-solid fa-circle-nodes text-brand-warning"></i> 2. Aorta Sentral (Central Aortic Pressure)',
+                    text: 'Tekanan aorta sentral (cSBP/cDBP) mencerminkan beban beban kardiovaskular sesungguhnya pada organ vital tanpa pengaruh amplifikasi perifer.'
+                },
+                'arteri': {
+                    title: '<i class="fa-solid fa-[#1677C8]"></i> 3. Pembuluh Arteri Perifer',
+                    text: 'Gelombang denyut menjalar dari aorta ke arteri ekstremitas. Kecepatan rambat (PWV) dan elastisitas menentukan kelenturan dinding arteri.'
+                },
+                'ppg': {
+                    title: '<i class="fa-solid fa-eye text-brand-secondary"></i> P. Transdermal Optical PPG Sensor',
+                    text: 'Sensor LED 525nm/850nm memancarkan cahaya mikro ke jaringan kulit. Detektor mengukur fluktuasi refleksi denyut volume darah mikro.'
+                },
+                'bis': {
+                    title: '<i class="fa-solid fa-bolt text-brand-accent"></i> B. Bioimpedance Electrodes (BIS)',
+                    text: 'Pasang elektroda mikro mengalirkan sinyal AC frekuensi tinggi aman. Menghitung konduktivitas listrik cairan vaskular dan jaringan.'
+                }
+            };
+
+            if (infoMap[key]) {
+                titleEl.innerHTML = infoMap[key].title;
+                bodyEl.innerText = infoMap[key].text;
+            }
+        }
+
+        // Realtime Chart Visualizations Logic (Chart.js)
+        function initPpgChart() {
+            const ctx = document.getElementById('ppgChartCanvas').getContext('2d');
+            const initialData = Array.from({length: 40}, (_, i) => Math.sin(i * 0.4) * 20 + 50 + (Math.random() * 2));
+            
+            ppgChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: initialData.map((_, i) => i),
+                    datasets: [{
+                        label: 'PPG Waveform',
+                        data: initialData,
+                        borderColor: '#16A6A1',
+                        borderWidth: 2,
+                        fill: false,
+                        tension: 0.4,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        x: { display: false },
+                        y: { display: false, min: 20, max: 80 }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // Start Animation Frame Loop
+            let step = 0;
+            function updatePpg() {
+                if (ppgRunning && ppgChartInstance) {
+                    step += 0.3;
+                    const nextVal = Math.sin(step) * 22 + (Math.sin(step*2) * 5) + 50 + (Math.random() * 1.5);
+                    ppgChartInstance.data.datasets[0].data.shift();
+                    ppgChartInstance.data.datasets[0].data.push(nextVal);
+                    ppgChartInstance.update('none');
+                }
+                requestAnimationFrame(updatePpg);
+            }
+            updatePpg();
+        }
+
+        function initBisChart() {
+            const ctx = document.getElementById('bisChartCanvas').getContext('2d');
+            const freqLabels = ['10kHz', '20kHz', '30kHz', '40kHz', '50kHz', '60kHz', '70kHz', '80kHz', '90kHz', '100kHz'];
+            const impedanceValues = [65, 61, 56, 50, 45.8, 42, 39, 37, 35, 34];
+
+            bisChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: freqLabels,
+                    datasets: [{
+                        label: 'Impedansi (Z0 Ω)',
+                        data: impedanceValues,
+                        backgroundColor: '#6B72D6',
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { ticks: { color: '#94A3B8', font: { size: 9 } }, grid: { display: false } },
+                        y: { ticks: { color: '#94A3B8', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function initCapChart() {
+            const ctx = document.getElementById('capChartCanvas').getContext('2d');
+            const points = 50;
+            const centralData = Array.from({length: points}, (_, i) => Math.sin(i * 0.3) * 20 + 80);
+            const peripheralData = Array.from({length: points}, (_, i) => Math.sin(i * 0.3 + 0.2) * 26 + 82);
+
+            capChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: centralData.map((_, i) => i),
+                    datasets: [
+                        {
+                            label: 'Aortic Sentral (cSBP)',
+                            data: centralData,
+                            borderColor: '#DC5B65',
+                            borderWidth: 2.5,
+                            tension: 0.4,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'Perifer Brakialis',
+                            data: peripheralData,
+                            borderColor: '#1677C8',
+                            borderWidth: 2,
+                            borderDash: [4, 4],
+                            tension: 0.4,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { display: false },
+                        y: { ticks: { color: '#94A3B8', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#E2E8F0', font: { size: 10 } } }
+                    }
+                }
+            });
+        }
+
+        // Controls PPG / BIS Simulations
+        function togglePpgSim() {
+            ppgRunning = !ppgRunning;
+            const btn = document.getElementById('btnPpgToggle');
+            const badge = document.getElementById('ppgStatusBadge');
+            if (ppgRunning) {
+                btn.innerHTML = '<i class="fa-solid fa-pause mr-1"></i> Jeda Simulasi';
+                badge.innerText = 'Sinyal Aktif';
+                badge.className = 'text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-brand-success';
+            } else {
+                btn.innerHTML = '<i class="fa-solid fa-play mr-1"></i> Lanjutkan';
+                badge.innerText = 'Dijeda';
+                badge.className = 'text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800';
+            }
+        }
+
+        function resetPpgSim() {
+            ppgTimerSeconds = 0;
+            document.getElementById('ppgTimerVal').innerText = "00:00";
+        }
+
+        function toggleBisSim() {
+            bisRunning = !bisRunning;
+            const btn = document.getElementById('btnBisToggle');
+            btn.innerHTML = bisRunning ? '<i class="fa-solid fa-pause mr-1"></i> Jeda Sweeping' : '<i class="fa-solid fa-play mr-1"></i> Lanjutkan Sweeping';
+        }
+
+        function resetBisSim() {
+            if (bisChartInstance) {
+                bisChartInstance.data.datasets[0].data = [65, 61, 56, 50, 45.8, 42, 39, 37, 35, 34];
+                bisChartInstance.update();
+            }
+        }
+
+        function startTimerLoop() {
+            setInterval(() => {
+                if (ppgRunning) {
+                    ppgTimerSeconds++;
+                    const m = Math.floor(ppgTimerSeconds / 60).toString().padStart(2, '0');
+                    const s = (ppgTimerSeconds % 60).toString().padStart(2, '0');
+                    const timerElem = document.getElementById('ppgTimerVal');
+                    if (timerElem) timerElem.innerText = `${m}:${s}`;
+                }
+            }, 1000);
+        }
+
+        // Autotriage Calculation Logic
+        function calculateAutotriage(e) {
+            e.preventDefault();
+            const age = parseInt(document.getElementById('triageAge').value) || 40;
+            const htn = parseInt(document.getElementById('triageHtn').value) || 0;
+            const dm = parseInt(document.getElementById('triageDm').value) || 0;
+            const smoker = parseInt(document.getElementById('triageSmoker').value) || 0;
+            const family = parseInt(document.getElementById('triageFamily').value) || 0;
+
+            // Simple deterministic demo score calculation
+            let score = 0;
+            if (age > 50) score += 2;
+            if (age > 65) score += 2;
+            score += (htn * 2) + (dm * 2) + (smoker * 1.5) + (family * 1);
+
+            const resultBox = document.getElementById('triageResultBox');
+            const iconBox = document.getElementById('triageBadgeIcon');
+            const tag = document.getElementById('triagePriorityTag');
+            const title = document.getElementById('triageTitle');
+            const desc = document.getElementById('triageDesc');
+            const recList = document.getElementById('triageRecList');
+
+            if (score <= 3) {
+                // LOW PRIORITY
+                resultBox.className = "p-5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left";
+                iconBox.className = "w-16 h-16 rounded-full bg-emerald-100 text-brand-success flex items-center justify-center text-3xl shrink-0";
+                iconBox.innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+                tag.className = "text-xs font-extrabold tracking-wider uppercase text-brand-success";
+                tag.innerText = "LOW PRIORITY (PRIORITAS RENDAH)";
+                title.innerText = "Profil VASCU-TRACE Dalam Batas Normal";
+                desc.innerText = "Kekakuan arteri dan estimasi tekanan aorta sentral relatif fleksibel. Risiko arteriosklerosis dini tergolong rendah.";
+                recList.innerHTML = `
+                    <li>Pertahankan pola hidup sehat, nutrisi seimbang, dan olahraga teratur.</li>
+                    <li>Lakukan pengecekan kesehatan rutin berkala secara periodik.</li>
+                `;
+            } else if (score <= 6) {
+                // MODERATE PRIORITY
+                resultBox.className = "p-5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left";
+                iconBox.className = "w-16 h-16 rounded-full bg-amber-100 text-brand-warning flex items-center justify-center text-3xl shrink-0";
+                iconBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>';
+                tag.className = "text-xs font-extrabold tracking-wider uppercase text-brand-warning";
+                tag.innerText = "MODERATE PRIORITY (PRIORITAS SEDANG)";
+                title.innerText = "Terdeteksi Indikasi Moderat Kekakuan Pembuluh Darah";
+                desc.innerText = "Terdapat beberapa faktor risiko yang dapat meningkatkan kekakuan arteri. Disarankan untuk berkonsultasi dengan tenaga kesehatan.";
+                recList.innerHTML = `
+                    <li>Pengawasan tekanan darah harian dan kontrol asupan garam.</li>
+                    <li>Jadwalkan pemeriksaan fisis lebih lanjut dengan dokter di Puskesmas/Klinik.</li>
+                    <li>Hentikan kebiasaan merokok dan kelola stres.</li>
+                `;
+            } else {
+                // HIGH PRIORITY
+                resultBox.className = "p-5 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left";
+                iconBox.className = "w-16 h-16 rounded-full bg-red-100 text-brand-danger flex items-center justify-center text-3xl shrink-0";
+                iconBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>';
+                tag.className = "text-xs font-extrabold tracking-wider uppercase text-brand-danger";
+                tag.innerText = "HIGH PRIORITY (PRIORITAS TINGGI)";
+                title.innerText = "Perlu Evaluasi & Tindak Lanjut Klinis Segera";
+                desc.innerText = "Profil indikator gabungan menunjukkan faktor risiko kardiovaskular bermakna. Diperlukan evaluasi klinis menyeluruh oleh tenaga medis profesional.";
+                recList.innerHTML = `
+                    <li>Konsultasikan segera ke dokter spesialis atau fasilitas kesehatan terdekat.</li>
+                    <li>Lakukan pemeriksaan penunjang tambahan (EKG, Profil Lipid, USG Arteri).</li>
+                    <li>Patuhi pengobatan dan modifikasi gaya hidup secara disiplin.</li>
+                `;
+            }
+        }
+
+        function saveTriageToHistory() {
+            const tagText = document.getElementById('triagePriorityTag').innerText;
+            const now = new Date();
+            const timeStr = now.toISOString().slice(0,16).replace('T', ' ');
+
+            const newLog = {
+                id: Date.now(),
+                date: timeStr,
+                category: 'Autotriage',
+                priority: tagText.includes('HIGH') ? 'HIGH PRIORITY' : (tagText.includes('MODERATE') ? 'MODERATE PRIORITY' : 'LOW PRIORITY'),
+                desc: document.getElementById('triageTitle').innerText
+            };
+
+            historyLogs.unshift(newLog);
+            renderHistoryLogs();
+            alert("Hasil sesi autotriage telah berhasil disimpan ke Riwayat Aktivitas!");
+        }
+
+        // History Table Renderer & Search Filter
+        function renderHistoryLogs() {
+            const tbody = document.getElementById('historyTableBody');
+            const empty = document.getElementById('historyEmptyState');
+
+            if (historyLogs.length === 0) {
+                tbody.innerHTML = '';
+                empty.classList.remove('hidden');
+                return;
+            }
+            empty.classList.add('hidden');
+
+            tbody.innerHTML = historyLogs.map(item => {
+                let badgeColor = 'bg-emerald-100 text-brand-success';
+                if (item.priority.includes('HIGH')) badgeColor = 'bg-red-100 text-brand-danger';
+                else if (item.priority.includes('MODERATE')) badgeColor = 'bg-amber-100 text-brand-warning';
+
+                return `
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                        <td class="p-3.5 font-mono text-gray-500 dark:text-gray-400">${item.date}</td>
+                        <td class="p-3.5 font-semibold text-brand-textPrimary dark:text-white">${item.category}</td>
+                        <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-[10px] font-bold ${badgeColor}">${item.priority}</span></td>
+                        <td class="p-3.5 text-gray-600 dark:text-gray-300 max-w-xs truncate">${item.desc}</td>
+                        <td class="p-3.5 text-right">
+                            <button onclick="deleteHistoryItem(${item.id})" class="text-gray-400 hover:text-brand-danger transition">
+                                <i class="fa-solid fa-trash text-xs"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function filterHistoryLogs() {
+            const query = document.getElementById('historySearchInput').value.toLowerCase();
+            const cat = document.getElementById('historyCategoryFilter').value;
+
+            const filtered = historyLogs.filter(item => {
+                const matchesSearch = item.date.toLowerCase().includes(query) || item.desc.toLowerCase().includes(query);
+                const matchesCat = (cat === 'all') || (item.category === cat);
+                return matchesSearch && matchesCat;
+            });
+
+            const tbody = document.getElementById('historyTableBody');
+            tbody.innerHTML = filtered.map(item => `
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
+                    <td class="p-3.5 font-mono text-gray-500">${item.date}</td>
+                    <td class="p-3.5 font-semibold">${item.category}</td>
+                    <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-brand-primary">${item.priority}</span></td>
+                    <td class="p-3.5 text-gray-600 max-w-xs truncate">${item.desc}</td>
+                    <td class="p-3.5 text-right">
+                        <button onclick="deleteHistoryItem(${item.id})" class="text-gray-400 hover:text-brand-danger">
+                            <i class="fa-solid fa-trash text-xs"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function deleteHistoryItem(id) {
+            if (confirm("Hapus item riwayat ini?")) {
+                historyLogs = historyLogs.filter(item => item.id !== id);
+                renderHistoryLogs();
+            }
+        }
+
+        function clearHistoryLogs() {
+            if (confirm("Apakah Anda yakin ingin menghapus seluruh log riwayat?")) {
+                historyLogs = [];
+                renderHistoryLogs();
+            }
+        }
+
+        // Modals Toggling & Settings Operations
+        function toggleProfileDropdown() {
+            document.getElementById('profileDropdown').classList.toggle('hidden');
+        }
+
+        function toggleNotificationModal() {
+            document.getElementById('notificationModal').classList.toggle('hidden');
+        }
+
+        function openProfileModal() {
+            document.getElementById('profileDropdown').classList.add('hidden');
+            document.getElementById('editName').value = userProfile.name;
+            document.getElementById('editRole').value = userProfile.role;
+            document.getElementById('editCity').value = userProfile.city || '';
+            document.getElementById('profileEditModal').classList.remove('hidden');
+        }
+
+        function saveUserProfileEdit(e) {
+            e.preventDefault();
+            userProfile.name = document.getElementById('editName').value;
+            userProfile.role = document.getElementById('editRole').value;
+            userProfile.city = document.getElementById('editCity').value;
+            localStorage.setItem('vascu_user_profile', JSON.stringify(userProfile));
+            updateUserUI();
+            closeModal('profileEditModal');
+        }
+
+        function openSettingsModal() {
+            document.getElementById('profileDropdown').classList.add('hidden');
+            document.getElementById('settingsModal').classList.remove('hidden');
+        }
+
+        function openFaqModal() {
+            document.getElementById('profileDropdown').classList.add('hidden');
+            document.getElementById('faqModal').classList.remove('hidden');
+        }
+
+        function openHelpModal() {
+            document.getElementById('profileDropdown').classList.add('hidden');
+            document.getElementById('helpModal').classList.remove('hidden');
+        }
+
+        function openAboutModal() {
+            document.getElementById('profileDropdown').classList.add('hidden');
+            document.getElementById('aboutModal').classList.remove('hidden');
+        }
+
+        function showPpgDetailsModal() {
+            document.getElementById('ppgDetailModal').classList.remove('hidden');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
+        function toggleDarkMode() {
+            document.documentElement.classList.toggle('dark');
+        }
+
+        function setTextSize(size) {
+            document.body.classList.remove('text-size-sm', 'text-size-normal', 'text-size-lg');
+            if (size === 'sm') document.body.classList.add('text-size-sm');
+            else if (size === 'lg') document.body.classList.add('text-size-lg');
+            else document.body.classList.add('text-size-normal');
+        }
+
+        function copyHelpNumber() {
+            const num = "081331965094";
+            const temp = document.createElement("input");
+            document.body.appendChild(temp);
+            temp.value = num;
+            temp.select();
+            document.execCommand('copy');
+            document.body.removeChild(temp);
+            alert("Nomor telepon bantuan 081331965094 berhasil disalin!");
+        }
+    </script>
+</body>
+</html>
